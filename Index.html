@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Convert MusicXML scores into jianpu (numbered notation) PDFs, right in your browser.">
+<title>Jianpu Press</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&display=swap">
+<style>
+/* Layout: a control rail on the left and the printed pages laid out on a desk surface to the right; stacks to one column on phones */
+:root{
+  --ground:#e8edeb; --panel:#f6f8f7; --ink:#1c2625; --muted:#56655f; --line:#cbd6d2;
+  --accent:#2c6a5c; --accent-ink:#ffffff; --accent-soft:#d6e7e1; --seal:#b0402e; --desk:#d9e1de;
+  --warn:#8a5a12; --warn-bg:#f6ead2; --err:#9c2f22; --err-bg:#f6dcd6;
+  --display:"Noto Serif SC","Songti SC","STSong",serif;
+  --body:"Noto Sans SC","PingFang SC",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --ground:#121817; --panel:#19211f; --ink:#e2eae7; --muted:#97a8a2; --line:#2c3835;
+  --accent:#72b8a5; --accent-ink:#0e1514; --accent-soft:#1f3631; --seal:#d4644f; --desk:#0d1211;
+  --warn:#e2b56a; --warn-bg:#2e2615; --err:#ef8a78; --err-bg:#331a16; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --ground:#121817; --panel:#19211f; --ink:#e2eae7; --muted:#97a8a2; --line:#2c3835;
+  --accent:#72b8a5; --accent-ink:#0e1514; --accent-soft:#1f3631; --seal:#d4644f; --desk:#0d1211;
+  --warn:#e2b56a; --warn-bg:#2e2615; --err:#ef8a78; --err-bg:#331a16; color-scheme:dark}
+html{color-scheme:light}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5}
+.bar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 14px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;max-width:1240px;margin:0 auto}
+.credit{max-width:1240px;margin:0 auto 10px;font-size:12px;color:var(--muted);letter-spacing:.02em}
+.credit b{color:var(--ink);font-weight:500}
+.seal{width:40px;height:40px;flex:none;display:grid;place-items:center;background:var(--seal);color:#fff;font-family:var(--display);font-weight:700;font-size:22px;border-radius:4px;transform:rotate(-3deg)}
+.brand h1{margin:0;font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.01em}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.wrap{display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px;max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.rail{display:flex;flex-direction:column;gap:18px;min-width:0}
+.group{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.group h2{margin:0;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.drop{border:1.5px dashed var(--line);border-radius:6px;padding:16px 12px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop strong{display:block;font-weight:500}
+.drop span{color:var(--muted);font-size:12px}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.file{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+select,input[type=text],textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--ground);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:52px}
+select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-visible,.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;cursor:pointer;border-radius:6px;padding:9px 14px;border:1px solid var(--line);background:var(--ground);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500;font-size:15px;padding:11px 14px}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.link{border:none;background:none;padding:0;color:var(--accent);text-decoration:underline;text-underline-offset:3px;font-size:13px;align-self:flex-start}
+.note{font-size:12px;color:var(--muted);margin:0}
+.help{font-size:13px;color:var(--muted)}
+.help ol{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.desk{background:var(--desk);border-radius:10px;padding:18px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.status{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px}
+.chip{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-variant-numeric:tabular-nums}
+.chip.ex{background:var(--accent-soft);border-color:transparent;color:var(--ink)}
+.msg{font-size:13px;border-radius:6px;padding:8px 12px}
+.msg.warn{background:var(--warn-bg);color:var(--warn)}
+.msg.err{background:var(--err-bg);color:var(--err)}
+.pages{display:flex;flex-direction:column;align-items:center;gap:18px}
+.pages canvas{width:100%;max-width:680px;height:auto;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 6px 20px rgba(0,0,0,.08);border-radius:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="credit">Made by <b>sunyu</b></div>
+  <div class="brand">
+    <div class="seal" aria-hidden="true">简</div>
+    <div><h1>Jianpu Press</h1><p>Staff notation in, 简谱 PDF out</p></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <aside class="rail">
+    <section class="group">
+      <h2>Source</h2>
+      <label class="drop" id="drop" for="fileIn">
+        <input type="file" id="fileIn">
+        <strong>Open a MusicXML file</strong>
+        <span>.musicxml, .xml or .mxl — tap or drop here</span>
+      </label>
+      <div class="file" id="fileName">Example loaded: 欢乐颂 (Ode to Joy)</div>
+      <button class="link" id="exampleBtn" type="button">Reload the example</button>
+    </section>
+
+    <section class="group">
+      <h2>Score</h2>
+      <label>Part<select id="partSel"></select></label>
+      <label id="staffWrap">Staff<select id="staffSel"></select></label>
+      <div class="row2">
+        <label>Key (1=)<select id="keySel"></select></label>
+        <label>Middle octave<select id="octSel">
+          <option value="auto">Auto (fewest dots)</option>
+          <option value="-1">Lower</option>
+          <option value="0">Tonic in octave 4</option>
+          <option value="1">Higher</option>
+        </select></label>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Page text</h2>
+      <label>Title<input type="text" id="titleIn"></label>
+      <label>Subtitle<input type="text" id="subIn"></label>
+      <label>Credits (right side, one per line)<textarea id="credIn" rows="2"></textarea></label>
+    </section>
+
+    <section class="group">
+      <h2>Export</h2>
+      <button class="primary" id="pdfBtn" type="button">Download PDF</button>
+      <p class="note" id="pdfNote">A4, one image per page. On iPhone, the PDF opens first; tap Share, then Save to Files.</p>
+    </section>
+
+    <section class="group help">
+      <h2>Starting from a PDF?</h2>
+      <div>Reading notes from a PDF needs music recognition, which can't run here.
+        <ol>
+          <li>Open the PDF in Audiveris (free) or MuseScore's PDF import.</li>
+          <li>Fix any misread notes, then export as MusicXML.</li>
+          <li>Open that file here.</li>
+        </ol>
+      </div>
+    </section>
+  </aside>
+
+  <section class="desk" aria-label="Jianpu preview">
+    <div class="status" id="status"></div>
+    <div id="msgs"></div>
+    <div class="pages" id="pages"></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+
+/* ---------- music constants ---------- */
+const STEP_IDX = {C:0,D:1,E:2,F:3,G:4,A:5,B:6};
+const STEP_PC = [0,2,4,5,7,9,11];
+const MAJ = [0,2,4,5,7,9,11];
+const KEY_NAME = {"-7":"♭C","-6":"♭G","-5":"♭D","-4":"♭A","-3":"♭E","-2":"♭B","-1":"F","0":"C","1":"G","2":"D","3":"A","4":"E","5":"B","6":"♯F","7":"♯C"};
+const TQ = {breve:8,whole:4,half:2,quarter:1,eighth:0.5,"16th":0.25,"32nd":0.125,"64th":0.0625};
+const CREDIT_LABEL = {composer:"作曲",arranger:"编曲",lyricist:"作词",poet:"作词",transcriber:"记谱"};
+
+/* ---------- xml helpers ---------- */
+const kid = (el,n) => { if(!el) return null; for(const c of el.children) if(c.localName===n) return c; return null; };
+const kids = (el,n) => el ? [...el.children].filter(c=>c.localName===n) : [];
+const txt = (el,n) => { const k = kid(el,n); return k ? k.textContent.trim() : ""; };
+
+/* ---------- example (public domain) ---------- */
+function exampleXML(){
+  const bars = ["F#4q F#4q G4q A4q","A4q G4q F#4q E4q","D4q D4q E4q F#4q","F#4q. E4e E4h",
+    "F#4q F#4q G4q A4q","A4q G4q F#4q E4q","D4q D4q E4q F#4q","E4q. D4e D4h",
+    "E4q E4q F#4q D4q","E4q F#4e G4e F#4q D4q","E4q F#4e G4e F#4q E4q","D4q E4q A3h",
+    "F#4q F#4q G4q A4q","A4q G4q F#4q E4q","D4q D4q E4q F#4q","E4q. D4e D4h"];
+  const DUR={w:8,h:4,q:2,e:1}, TYPE={w:"whole",h:"half",q:"quarter",e:"eighth"};
+  let x = '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>欢乐颂</work-title></work>'
+    + '<identification><creator type="composer">Ludwig van Beethoven</creator></identification>'
+    + '<part-list><score-part id="P1"><part-name>Melody</part-name></score-part></part-list><part id="P1">';
+  bars.forEach((b,i)=>{
+    x += `<measure number="${i+1}">`;
+    if(i===0) x += '<attributes><divisions>2</divisions><key><fifths>2</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>'
+      + '<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>120</per-minute></metronome></direction-type><sound tempo="120"/></direction>'
+      + '<direction placement="below"><direction-type><dynamics><mf/></dynamics></direction-type></direction>';
+    if(i===8) x += '<direction placement="below"><direction-type><dynamics><p/></dynamics></direction-type></direction>';
+    if(i===12) x += '<direction placement="below"><direction-type><dynamics><f/></dynamics></direction-type></direction>';
+    for(const t of b.split(" ")){
+      const m = t.match(/^([A-G])(#?)(\d)([whqe])(\.?)$/);
+      let d = DUR[m[4]]; if(m[5]) d *= 1.5;
+      const slur = (i===9||i===10) && m[4]==="e" ? `<notations><slur type="${m[1]==="F"?"start":"stop"}" number="1"/></notations>` : "";
+      x += `<note><pitch><step>${m[1]}</step>${m[2]?"<alter>1</alter>":""}<octave>${m[3]}</octave></pitch><duration>${d}</duration><voice>1</voice><type>${TYPE[m[4]]}</type>${m[5]?"<dot/>":""}${slur}</note>`;
+    }
+    if(i===bars.length-1) x += '<barline location="right"><bar-style>light-heavy</bar-style></barline>';
+    x += "</measure>";
+  });
+  return x + "</part></score-partwise>";
+}
+
+/* ---------- parsing ---------- */
+function parseScore(text){
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if(doc.getElementsByTagName("parsererror").length) throw new Error("This file isn't valid MusicXML. Re-export it from your notation program and try again.");
+  const root = doc.documentElement;
+  if(root.localName === "score-timewise") throw new Error("This is a timewise MusicXML file. Re-export it as standard (partwise) MusicXML and try again.");
+  if(root.localName !== "score-partwise") throw new Error("This doesn't look like a MusicXML score. Export the score as MusicXML and open that file.");
+  const partList = kid(root,"part-list");
+  const parts = kids(partList,"score-part").map(sp => ({ id: sp.getAttribute("id"), name: txt(sp,"part-name") || sp.getAttribute("id") }));
+  const partEls = kids(root,"part");
+  for(const p of parts){
+    p.el = partEls.find(e => e.getAttribute("id") === p.id) || null;
+    let s = 1;
+    if(p.el) for(const st of p.el.getElementsByTagName("staves")) s = Math.max(s, parseInt(st.textContent,10)||1);
+    p.staves = s;
+  }
+  const usable = parts.filter(p => p.el);
+  if(!usable.length) throw new Error("No playable parts were found in this file.");
+  let title = txt(kid(root,"work"),"work-title") || txt(root,"movement-title");
+  if(!title){
+    for(const cr of kids(root,"credit")){ if(txt(cr,"credit-type")==="title"){ title = txt(cr,"credit-words"); break; } }
+  }
+  const creators = kids(kid(root,"identification"),"creator").map(c => ({type:(c.getAttribute("type")||"").toLowerCase(), name:c.textContent.trim()})).filter(c=>c.name);
+  return { title, creators, parts: usable };
+}
+
+function readPitch(n){
+  const p = kid(n,"pitch"); if(!p) return null;
+  const step = txt(p,"step"); if(!(step in STEP_IDX)) return null;
+  return { step, alter: Math.round(parseFloat(txt(p,"alter"))||0), octave: parseInt(txt(p,"octave"),10)||4 };
+}
+const staffOf = n => parseInt(txt(n,"staff"),10) || 1;
+
+function addNotations(tok, n){
+  for(const t of kids(n,"tie")){ const ty=t.getAttribute("type"); if(ty==="start") tok.tieStart=true; if(ty==="stop") tok.tieStop=true; }
+  for(const nots of kids(n,"notations")){
+    for(const ch of nots.children){
+      const nm = ch.localName, ty = ch.getAttribute("type");
+      if(nm==="tied"){ if(ty==="start") tok.tieStart=true; if(ty==="stop") tok.tieStop=true; }
+      else if(nm==="slur"){ const num=ch.getAttribute("number")||"1"; if(ty==="start") (tok.slurStart||(tok.slurStart=[])).push(num); if(ty==="stop") (tok.slurStop||(tok.slurStop=[])).push(num); }
+      else if(nm==="tuplet"){ if(ty==="start") tok.tupStart = parseInt(txt(kid(n,"time-modification"),"actual-notes"),10)||3; if(ty==="stop") tok.tupStop=true; }
+      else if(nm==="fermata") tok.fermata=true;
+      else if(nm==="ornaments"){ if(kid(ch,"tremolo")) tok.trem=true; if(kid(ch,"trill-mark")) tok.trill=true; }
+      else if(nm==="articulations"){ if(kid(ch,"staccato")||kid(ch,"staccatissimo")) tok.stacc=true; if(kid(ch,"accent")||kid(ch,"strong-accent")) tok.accent=true; }
+    }
+  }
+}
+
+function fromQuarters(q){
+  for(const [name,b] of Object.entries(TQ)) for(let d=0; d<=2; d++){ if(Math.abs(b*(2-Math.pow(0.5,d)) - q) < 1e-3) return [b,d]; }
+  return [1,0];
+}
+
+function expandTok(tok, measureQ){
+  if(tok.measureRest){
+    const n = Math.max(1, Math.round(measureQ));
+    return Array.from({length:n}, (_,i) => ({kind:"note", tok, ul:0, aug:0, first:i===0, last:i===n-1}));
+  }
+  let base = TQ[tok.type], dots = tok.dots;
+  if(!base){ [base,dots] = fromQuarters(tok.dur / tok.divisions); }
+  const total = base * (2 - Math.pow(0.5, dots));
+  if(base >= 1 && !(base===1)){
+    const n = Math.max(1, Math.round(total));
+    if(tok.rest) return Array.from({length:n}, (_,i) => ({kind:"note", tok, ul:0, aug:0, first:i===0, last:i===n-1}));
+    return [{kind:"note", tok, ul:0, aug:0, first:true, last:true}, ...Array.from({length:n-1}, () => ({kind:"dash", tok}))];
+  }
+  if(base === 1) return [{kind:"note", tok, ul:0, aug:dots, first:true, last:true}];
+  return [{kind:"note", tok, ul:Math.round(Math.log2(1/base)), aug:dots, first:true, last:true}];
+}
+
+function convertPart(part, staff){
+  const out = { measures:[], firstFifths:null, firstTime:null, firstTempo:null, stats:{multiVoice:false, chords:false, notes:0} };
+  let divisions = 1, fifths = null, beats = 4, beatType = 4;
+  let pendingWords = [], pendingTempo = null;
+  kids(part.el,"measure").forEach((m, mi) => {
+    const M = { number: m.getAttribute("number")||String(mi+1), items:[], startRepeat:false, endRepeat:false, endStyle:"", keyChange:null, timeChange:null, ending:null };
+    const voices = new Set();
+    for(const n of kids(m,"note")){ if(staffOf(n)!==staff || kid(n,"grace")) continue; voices.add(txt(n,"voice")||"1"); }
+    const vlist = [...voices].sort((a,b) => (parseInt(a,10)||0)-(parseInt(b,10)||0));
+    if(vlist.length > 1) out.stats.multiVoice = true;
+    const voice = vlist[0] || "1";
+    let pos = 0, lastTok = null, graces = [];
+    for(const c of m.children){
+      const nm = c.localName;
+      if(nm === "attributes"){
+        const d = kid(c,"divisions"); if(d) divisions = parseFloat(d.textContent)||divisions;
+        for(const k of kids(c,"key")){
+          const kn = k.getAttribute("number"); if(kn && parseInt(kn,10)!==staff) continue;
+          const f = kid(k,"fifths"); if(!f) continue;
+          const nf = parseInt(f.textContent,10)||0;
+          if(fifths === null){ fifths = nf; out.firstFifths = nf; }
+          else if(nf !== fifths){ fifths = nf; M.keyChange = nf; }
+        }
+        const t = kid(c,"time");
+        if(t){ const b = parseInt(txt(t,"beats"),10), bt = parseInt(txt(t,"beat-type"),10);
+          if(b && bt){ if(out.firstTime === null) out.firstTime = [b,bt]; else if(b!==beats || bt!==beatType) M.timeChange = [b,bt]; beats=b; beatType=bt; } }
+      } else if(nm === "direction"){
+        const st = kid(c,"staff"); if(st && parseInt(st.textContent,10)!==staff) continue;
+        for(const dt of kids(c,"direction-type")){
+          for(const w of kids(dt,"words")) if(w.textContent.trim()) pendingWords.push(w.textContent.trim());
+          const dyn = kid(dt,"dynamics"); if(dyn && dyn.firstElementChild) pendingWords.push(dyn.firstElementChild.localName === "other-dynamics" ? dyn.firstElementChild.textContent.trim() : dyn.firstElementChild.localName);
+          const mt = kid(dt,"metronome");
+          if(mt && txt(mt,"per-minute")) pendingTempo = { unit: txt(mt,"beat-unit")||"quarter", dotted: !!kid(mt,"beat-unit-dot"), pm: txt(mt,"per-minute") };
+        }
+        const snd = kid(c,"sound");
+        if(snd && snd.getAttribute("tempo") && !pendingTempo) pendingTempo = { unit:"quarter", dotted:false, pm: String(Math.round(parseFloat(snd.getAttribute("tempo")))) };
+      } else if(nm === "sound"){
+        if(c.getAttribute("tempo") && !pendingTempo) pendingTempo = { unit:"quarter", dotted:false, pm: String(Math.round(parseFloat(c.getAttribute("tempo")))) };
+      } else if(nm === "barline"){
+        const loc = c.getAttribute("location")||"right", rep = kid(c,"repeat"), style = txt(c,"bar-style"), end = kid(c,"ending");
+        if(loc === "left"){ if(rep && rep.getAttribute("direction")==="forward") M.startRepeat = true; if(end && end.getAttribute("type")==="start") M.ending = end.getAttribute("number")||"1"; }
+        else { if(rep && rep.getAttribute("direction")==="backward") M.endRepeat = true; if(style) M.endStyle = style; }
+      } else if(nm === "note"){
+        if(staffOf(c) !== staff) continue;
+        if((txt(c,"voice")||"1") !== voice) continue;
+        const isChord = !!kid(c,"chord"), isGrace = !!kid(c,"grace"), restEl = kid(c,"rest"), pitch = readPitch(c);
+        if(isGrace){ if(pitch){ if(isChord && graces.length) graces[graces.length-1].pitches.push(pitch); else graces.push({pitches:[pitch]}); } continue; }
+        if(isChord){ if(lastTok && !lastTok.rest && pitch){ lastTok.pitches.push(pitch); out.stats.chords = true; addNotations(lastTok,c); } continue; }
+        const dur = parseFloat(txt(c,"duration"))||0;
+        const compound = beatType===8 && beats%3===0 && beats>3;
+        const tok = {
+          rest: !!restEl || !pitch, pitches: pitch ? [pitch] : [], type: txt(c,"type"), dots: kids(c,"dot").length,
+          dur, divisions, measureRest: !!restEl && (restEl.getAttribute("measure")==="yes" || (!txt(c,"type") && dur >= divisions*beats*4/beatType - 1e-6)),
+          graces, words: pendingWords, tempo: null, fifths: fifths ?? 0,
+          group: Math.floor(pos / ((compound?1.5:1)*divisions) + 1e-6), measureIdx: mi
+        };
+        if(pendingTempo){ if(out.firstTempo === null && mi === 0 && pos === 0) out.firstTempo = pendingTempo; else tok.tempo = pendingTempo; }
+        pendingTempo = null; graces = []; pendingWords = []; pos += dur;
+        addNotations(tok, c);
+        if(!tok.rest) out.stats.notes++;
+        M.items.push(...expandTok(tok, beats*4/beatType));
+        lastTok = tok;
+      } else if(nm === "backup" || nm === "forward"){ /* other voices are skipped */ }
+    }
+    if(out.firstFifths === null && fifths !== null) out.firstFifths = fifths;
+    out.measures.push(M);
+  });
+  if(out.firstFifths === null) out.firstFifths = 0;
+  if(!out.firstTime) out.firstTime = [4,4];
+  return out;
+}
+
+/* ---------- jianpu mapping ---------- */
+function toJianpu(p, fifths, shift){
+  const T = ((fifths*4)%7+7)%7, tonicPc = ((fifths*7)%12+12)%12;
+  const L = STEP_IDX[p.step], deg = ((L-T)%7+7)%7;
+  const expected = (tonicPc + MAJ[deg]) % 12, actual = ((STEP_PC[L] + p.alter)%12+12)%12;
+  let acc = actual - expected; if(acc > 6) acc -= 12; if(acc < -6) acc += 12;
+  const abs = p.octave*7 + L, ref = 4*7 + T + shift*7;
+  return { d: deg+1, acc, oct: Math.floor((abs - ref)/7), abs: abs*10 + p.alter };
+}
+
+function applyJianpu(conv, keyOverride, octMode){
+  const fifthsFor = tok => keyOverride === "auto" ? tok.fifths : keyOverride;
+  const allToks = new Set();
+  for(const M of conv.measures) for(const it of M.items) allToks.add(it.tok);
+  let shift = 0;
+  if(octMode === "auto"){
+    let best = Infinity;
+    for(const s of [0,-1,1]){
+      let cost = 0;
+      for(const tok of allToks) for(const p of tok.pitches) cost += Math.abs(toJianpu(p, fifthsFor(tok), s).oct);
+      if(cost < best - 1e-9){ best = cost; shift = s; }
+    }
+  } else shift = parseInt(octMode,10);
+  for(const tok of allToks){
+    tok.jp = tok.pitches.map(p => toJianpu(p, fifthsFor(tok), shift)).sort((a,b) => b.abs - a.abs);
+    tok.gjp = tok.graces.map(g => g.pitches.map(p => toJianpu(p, fifthsFor(tok), shift)).sort((a,b)=>b.abs-a.abs)[0]);
+  }
+  conv.shift = shift;
+  conv.headFifths = keyOverride === "auto" ? conv.firstFifths : keyOverride;
+  conv.keyOverridden = keyOverride !== "auto";
+  if(conv.keyOverridden) for(const M of conv.measures) M.keyChange = null;
+}
+
+/* ---------- layout ---------- */
+const PAGE = { w:595.28, h:841.89, mx:48, firstTop:150, top:58, bottom:62 };
+const F = 16, ROWH = 26, BASE = 23;
+const SCORE_FONT = '"Noto Serif SC","Songti SC","Times New Roman",serif';
+const SANS_FONT = '"Noto Sans SC","PingFang SC",system-ui,sans-serif';
+const SYM_FONT = '"Noto Serif SC","Segoe UI Symbol","Apple Symbols","DejaVu Serif",serif';
+
+function measureItems(M){
+  for(const it of M.items){
+    if(it.kind === "dash"){ it.nw = BASE; it.gw = 0; continue; }
+    const scale = [1,0.8,0.66,0.56,0.52][Math.min(it.ul,4)];
+    let w = Math.max(14, BASE*scale);
+    const hasAcc = !it.tok.rest && it.tok.jp.some(j => j.acc);
+    if(hasAcc) w += 5;
+    w += it.aug * 6;
+    it.gw = (it.first && it.tok.gjp.length) ? it.tok.gjp.length*7 + 3 : 0;
+    it.nw = w + it.gw;
+  }
+  const pre = 7 + (M.startRepeat ? 9 : 0) + (M.keyChange!==null || M.timeChange ? 0 : 0);
+  const post = 7 + (M.endRepeat ? 9 : 0);
+  M.pre = pre; M.post = post;
+  M.nw = pre + post + M.items.reduce((a,it) => a + it.nw, 0);
+}
+
+function layoutScore(conv, meta){
+  const avail = PAGE.w - 2*PAGE.mx;
+  conv.measures.forEach(measureItems);
+  const lines = []; let cur = [], curW = 0;
+  for(const M of conv.measures){
+    if(cur.length && curW + M.nw > avail){ lines.push(cur); cur = []; curW = 0; }
+    cur.push(M); curW += M.nw;
+  }
+  if(cur.length) lines.push(cur);
+  const L = lines.map((ms, li) => {
+    const nat = ms.reduce((a,M)=>a+M.nw,0);
+    let s = avail / nat;
+    if(li === lines.length-1 && s > 1.3) s = Math.min(s, 1.3);
+    let rows = 1, maxUl = 0, maxLow = 0, anno = false;
+    ms.forEach((M,mi) => {
+      if(M.keyChange!==null || M.timeChange || M.ending) anno = true;
+      for(const it of M.items){
+        if(it.kind !== "note") continue;
+        const t = it.tok;
+        rows = Math.max(rows, t.rest ? 1 : t.jp.length);
+        maxUl = Math.max(maxUl, it.ul);
+        if(!t.rest && t.jp.length) maxLow = Math.max(maxLow, Math.max(0, -t.jp[t.jp.length-1].oct));
+        if(it.first && (t.words.length || t.tempo)) anno = true;
+      }
+    });
+    const annoH = anno ? 16 : 0, arcH = 17;
+    const h = annoH + arcH + rows*ROWH + maxUl*3.3 + maxLow*3.3 + 20;
+    return { ms, s, rows, annoH, arcH, h };
+  });
+  // paginate
+  const pages = []; let page = { lines:[] }, y = PAGE.firstTop;
+  for(const ln of L){
+    if(page.lines.length && y + ln.h > PAGE.h - PAGE.bottom){ pages.push(page); page = { lines:[] }; y = PAGE.top; }
+    ln.y = y; page.lines.push(ln); y += ln.h;
+  }
+  pages.push(page);
+  return { pages, conv, meta };
+}
+
+/* ---------- drawing ---------- */
+function dot(ctx, x, y, r){ ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); }
+function arc(ctx, x1, x2, y, open){
+  const dx = Math.max(6, x2 - x1), lift = Math.min(9, 3 + dx*0.1);
+  ctx.beginPath(); ctx.moveTo(x1, y); ctx.bezierCurveTo(x1 + dx*0.25, y - lift, x2 - dx*0.25, y - lift, x2, y);
+  ctx.bezierCurveTo(x2 - dx*0.25, y - lift - 1.1, x1 + dx*0.25, y - lift - 1.1, x1, y); ctx.fill();
+}
+
+function drawHeader(ctx, layout){
+  const { meta, conv } = layout;
+  ctx.fillStyle = "#111";
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  if(meta.title){ ctx.font = `700 23px ${SCORE_FONT}`; ctx.fillText(meta.title, PAGE.w/2, 66); }
+  if(meta.subtitle){ ctx.font = `400 12px ${SANS_FONT}`; ctx.fillStyle = "#333"; ctx.fillText(meta.subtitle, PAGE.w/2, 88); }
+  ctx.fillStyle = "#111";
+  // key + time
+  ctx.textAlign = "left";
+  const x0 = PAGE.mx, yk = 124;
+  ctx.font = `500 15px ${SYM_FONT}`;
+  const keyStr = "1=" + KEY_NAME[String(conv.headFifths)];
+  ctx.fillText(keyStr, x0, yk);
+  let x = x0 + ctx.measureText(keyStr).width + 12;
+  const [b, bt] = conv.firstTime;
+  ctx.font = `500 11px ${SCORE_FONT}`; ctx.textAlign = "center";
+  const tw = Math.max(ctx.measureText(String(b)).width, ctx.measureText(String(bt)).width) + 4;
+  ctx.fillText(String(b), x + tw/2, yk - 7);
+  ctx.fillText(String(bt), x + tw/2, yk + 5);
+  ctx.fillRect(x, yk - 5, tw, 0.8);
+  x += tw + 14;
+  ctx.textAlign = "left";
+  if(conv.firstTempo){
+    ctx.font = `400 13px ${SYM_FONT}`;
+    const glyph = conv.firstTempo.unit === "half" ? "𝅗𝅥" : conv.firstTempo.unit === "eighth" ? "♪" : "♩";
+    ctx.fillText(`${glyph}${conv.firstTempo.dotted?".":""} = ${conv.firstTempo.pm}`, x, yk);
+  }
+  // credits
+  const lines = (meta.credits||"").split("\n").map(s=>s.trim()).filter(Boolean);
+  ctx.textAlign = "right"; ctx.font = `400 11px ${SANS_FONT}`; ctx.fillStyle = "#222";
+  const yc0 = yk - (lines.length-1)*15;
+  lines.forEach((l,i) => ctx.fillText(l, PAGE.w - PAGE.mx, yc0 + i*15));
+}
+
+function drawBarline(ctx, x, yTop, yBot, style){
+  ctx.fillStyle = "#111";
+  if(style === "final"){ ctx.fillRect(x - 4.6, yTop, 0.9, yBot-yTop); ctx.fillRect(x - 2.6, yTop, 2.6, yBot-yTop); }
+  else if(style === "double"){ ctx.fillRect(x - 3.2, yTop, 0.9, yBot-yTop); ctx.fillRect(x - 0.9, yTop, 0.9, yBot-yTop); }
+  else ctx.fillRect(x - 0.45, yTop, 0.9, yBot-yTop);
+}
+
+function drawPage(ctx, layout, pi, S, arcState){
+  ctx.setTransform(S,0,0,S,0,0);
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,PAGE.w,PAGE.h);
+  if(pi === 0) drawHeader(ctx, layout);
+  const page = layout.pages[pi];
+  for(const ln of page.lines) drawLine(ctx, ln, arcState);
+  ctx.fillStyle = "#555"; ctx.font = `400 10px ${SANS_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.fillText(`— ${pi+1} —`, PAGE.w/2, PAGE.h - 30);
+}
+
+function drawLine(ctx, ln, arcState){
+  const s = ln.s, y0 = ln.y + ln.annoH + ln.arcH, rows = ln.rows;
+  const ycRow = r => y0 + r*ROWH + ROWH/2;
+  const ycBot = ycRow(rows-1);
+  const barTop = y0 + 4, barBot = y0 + rows*ROWH - 4;
+  const annoY = ln.y + ln.annoH - 3;
+  const arcY = y0 + 1;
+  const lineLeft = PAGE.mx, lineRight = PAGE.mx + ln.ms.reduce((a,M)=>a+M.nw*s,0);
+  let x = PAGE.mx;
+  const placed = [];
+  ctx.textBaseline = "middle";
+  // measure number at line start
+  ctx.fillStyle = "#777"; ctx.font = `italic 400 8.5px ${SANS_FONT}`; ctx.textAlign = "right";
+  ctx.fillText(ln.ms[0].number, PAGE.mx - 7, ycRow(0) - 6);
+
+  ln.ms.forEach((M, mi) => {
+    const mStart = x;
+    ctx.fillStyle = "#111";
+    if(M.startRepeat){
+      ctx.fillRect(x + 1, barTop, 2.6, barBot-barTop); ctx.fillRect(x + 5, barTop, 0.9, barBot-barTop);
+      dot(ctx, x + 9, (barTop+barBot)/2 - 4, 1.4); dot(ctx, x + 9, (barTop+barBot)/2 + 4, 1.4);
+    }
+    // annotations at measure start
+    let annoX = x + 2;
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    if(M.keyChange !== null){ ctx.font = `500 11px ${SYM_FONT}`; const t = "1=" + KEY_NAME[String(M.keyChange)]; ctx.fillText(t, annoX, annoY); annoX += ctx.measureText(t).width + 8; }
+    if(M.timeChange){ ctx.font = `500 11px ${SCORE_FONT}`; const t = M.timeChange.join("/"); ctx.fillText(t, annoX, annoY); annoX += ctx.measureText(t).width + 8; }
+    if(M.ending){ ctx.fillRect(x+1, annoY - 11, 0.8, 10); ctx.fillRect(x+1, annoY - 11, Math.min(60, M.nw*s*0.7), 0.8); ctx.font = `400 9.5px ${SANS_FONT}`; ctx.fillText(M.ending + ".", x + 4, annoY - 1); }
+    ctx.textBaseline = "middle";
+    x += M.pre * s;
+    for(const it of M.items){
+      const w = it.nw * s;
+      placed.push({ it, x, w, M });
+      if(it.kind === "dash"){
+        ctx.fillStyle = "#111"; ctx.fillRect(x + w/2 - 4.5, ycBot - 0.7, 9, 1.4);
+      } else drawNote(ctx, it, x, w, s, rows, ycRow, annoY, arcY, ln);
+      x += w;
+    }
+    x += M.post * s;
+    const style = M.endStyle === "light-heavy" ? "final" : (M.endStyle === "light-light" ? "double" : "");
+    if(M.endRepeat){
+      ctx.fillStyle = "#111";
+      dot(ctx, x - 10, (barTop+barBot)/2 - 4, 1.4); dot(ctx, x - 10, (barTop+barBot)/2 + 4, 1.4);
+      drawBarline(ctx, x, barTop, barBot, "final");
+    } else drawBarline(ctx, x, barTop, barBot, style);
+  });
+
+  // underlines (beat groups)
+  ctx.fillStyle = "#111";
+  const maxUl = Math.max(0, ...placed.map(p => p.it.kind==="note" ? p.it.ul : 0));
+  for(let k = 1; k <= maxUl; k++){
+    let run = null;
+    const flush = () => { if(run){ ctx.fillRect(run.x1, ycBot + 8.2 + (k-1)*3.3, run.x2 - run.x1, 0.95); run = null; } };
+    for(let i = 0; i < placed.length; i++){
+      const p = placed[i];
+      const ok = p.it.kind === "note" && p.it.ul >= k;
+      if(!ok){ flush(); continue; }
+      const x1 = p.x + p.it.gw*ln.s + 1.5, x2 = p.x + p.w - 1.5;
+      if(run && run.M === p.M && run.group === p.it.tok.group && run.last === i - 1) { run.x2 = x2; run.last = i; }
+      else { flush(); run = { x1, x2, M: p.M, group: p.it.tok.group, last: i }; }
+    }
+    flush();
+  }
+
+  // ties, slurs, tuplets
+  ctx.fillStyle = "#111";
+  for(const p of placed){
+    if(p.it.kind !== "note") continue;
+    const t = p.it.tok, cx = p.it._cx;
+    if(p.it.first){
+      const stops = [];
+      if(t.tieStop) stops.push("tie");
+      for(const n of (t.slurStop||[])) stops.push("slur"+n);
+      for(const key of stops){
+        const st = arcState.open[key];
+        if(st){
+          if(st.line === ln) arc(ctx, st.x + 2, cx - 2, arcY - (key==="tie"?0:2));
+          else arc(ctx, lineLeft - 4, cx - 2, arcY - (key==="tie"?0:2));
+          delete arcState.open[key];
+        }
+      }
+      if(t.tieStart) arcState.open["tie"] = { x: cx, line: ln };
+      for(const n of (t.slurStart||[])) arcState.open["slur"+n] = { x: cx, line: ln };
+      if(t.tupStart) arcState.tup = { x: p.x, n: t.tupStart, line: ln };
+    }
+    if(p.it.last && t.tupStop && arcState.tup){
+      const tu = arcState.tup; const x1 = tu.line === ln ? tu.x + 2 : lineLeft, x2 = p.x + p.w - 2, yy = arcY - 9;
+      ctx.font = `italic 500 9px ${SCORE_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const mid = (x1+x2)/2;
+      ctx.fillRect(x1, yy, Math.max(0, mid - x1 - 5), 0.7); ctx.fillRect(mid + 5, yy, Math.max(0, x2 - mid - 5), 0.7);
+      ctx.fillRect(x1, yy, 0.7, 3); ctx.fillRect(x2 - 0.7, yy, 0.7, 3);
+      ctx.fillText(String(tu.n), mid, yy);
+      arcState.tup = null;
+    }
+  }
+  // arcs still open at line end: draw their tails
+  for(const key of Object.keys(arcState.open)){
+    const st = arcState.open[key];
+    if(st.line === ln && !st.tailed){ arc(ctx, st.x + 2, lineRight + 6, arcY - (key==="tie"?0:2)); st.tailed = true; }
+  }
+}
+
+function drawNote(ctx, it, x, w, s, rows, ycRow, annoY, arcY, ln){
+  const t = it.tok;
+  const gw = it.gw * s, augW = it.aug * 6 * s;
+  const hasAcc = !t.rest && t.jp.some(j => j.acc);
+  const accW = hasAcc ? 5*s : 0;
+  const cx = x + gw + accW + (w - gw - accW - augW)/2;
+  it._cx = cx;
+  ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const n = t.rest ? 1 : t.jp.length;
+  const bottomRow = rows - 1;
+  if(t.rest){
+    const yc = ycRow(bottomRow);
+    ctx.font = `500 ${F}px ${SCORE_FONT}`; ctx.fillText("0", cx, yc + 0.5);
+  } else {
+    t.jp.forEach((j, i) => {
+      const r = bottomRow - (n - 1 - i);
+      const yc = ycRow(r);
+      ctx.font = `500 ${F}px ${SCORE_FONT}`; ctx.fillText(String(j.d), cx, yc + 0.5);
+      if(j.acc){
+        ctx.font = `500 10px ${SYM_FONT}`; ctx.textAlign = "right";
+        const a = j.acc > 0 ? (j.acc > 1 ? "×" : "♯") : (j.acc < -1 ? "♭♭" : "♭");
+        ctx.fillText(a, cx - 4.6, yc - 5); ctx.textAlign = "center";
+      }
+      for(let k = 0; k < j.oct; k++) dot(ctx, cx, yc - 7.6 - k*3.3, 1.2);
+      if(j.oct < 0){
+        const isBottom = r === bottomRow;
+        for(let k = 0; k < -j.oct; k++){
+          const yy = isBottom ? yc + 8.6 + it.ul*3.3 + 1.6 + k*3.3 : yc + 7.6 + k*3.3;
+          dot(ctx, cx, yy, 1.2);
+        }
+      }
+    });
+  }
+  // augmentation dots
+  const ycB = ycRow(bottomRow);
+  for(let k = 0; k < it.aug; k++) dot(ctx, cx + 7 + k*5*s, ycB, 1.35);
+  if(!it.first) return;
+  // grace notes
+  if(t.gjp && t.gjp.length){
+    const yg = ycRow(rows - n) - 6;
+    ctx.font = `500 9px ${SCORE_FONT}`;
+    t.gjp.forEach((g, gi) => {
+      const gx = x + 3 + gi*7*s + 3;
+      ctx.fillText(String(g.d), gx, yg);
+      for(let k=0;k<g.oct;k++) dot(ctx, gx, yg - 5 - k*2.4, 0.8);
+      for(let k=0;k<-g.oct;k++) dot(ctx, gx, yg + 7.2 + k*2.4, 0.8);
+    });
+    ctx.fillRect(x + 3, yg + 5, t.gjp.length*7*s, 0.7);
+  }
+  // marks above
+  const topY = ycRow(rows - n) - 9;
+  if(t.fermata){ ctx.beginPath(); ctx.arc(cx, topY - 4, 5, Math.PI, 0); ctx.lineWidth = 1; ctx.strokeStyle = "#111"; ctx.stroke(); dot(ctx, cx, topY - 4, 1); }
+  if(t.trem){ ctx.save(); ctx.strokeStyle = "#111"; ctx.lineWidth = 1; for(let k=0;k<3;k++){ ctx.beginPath(); ctx.moveTo(cx - 3, topY - 3 - k*2.6 + 1.5); ctx.lineTo(cx + 3, topY - 3 - k*2.6 - 1.5); ctx.stroke(); } ctx.restore(); }
+  if(t.stacc){ ctx.beginPath(); ctx.moveTo(cx - 2, topY - 2); ctx.lineTo(cx + 2, topY - 2); ctx.lineTo(cx, topY + 2); ctx.closePath(); ctx.fill(); }
+  if(t.accent){ ctx.save(); ctx.strokeStyle="#111"; ctx.lineWidth=0.9; ctx.beginPath(); ctx.moveTo(cx-3.5, topY-6); ctx.lineTo(cx+3.5, topY-4); ctx.lineTo(cx-3.5, topY-2); ctx.stroke(); ctx.restore(); }
+  if(t.trill){ ctx.font = `italic 600 9px ${SCORE_FONT}`; ctx.fillText("tr", cx, topY - 4); }
+  // words, dynamics, tempo changes
+  const bits = [...t.words];
+  if(t.tempo) bits.push(`♩=${t.tempo.pm}`);
+  if(bits.length){
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    let ax = x + 1;
+    for(const b of bits){
+      const dyn = /^(p{1,4}|mp|mf|f{1,4}|sf|sfz|fz|fp|rfz)$/.test(b);
+      ctx.font = dyn ? `italic 700 11px ${SCORE_FONT}` : `400 10.5px ${b.startsWith("♩")?SYM_FONT:SANS_FONT}`;
+      ctx.fillText(b, ax, annoY); ax += ctx.measureText(b).width + 6;
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  }
+}
+
+/* ---------- app state + rendering ---------- */
+const state = { score:null, partIdx:0, staff:1, key:"auto", oct:"auto", isExample:true, layout:null, fileName:"" };
+
+function fillKeySelect(){
+  const sel = $("#keySel"); sel.innerHTML = "";
+  sel.append(new Option("Auto (from score)", "auto"));
+  for(let f = -7; f <= 7; f++) sel.append(new Option("1=" + KEY_NAME[String(f)], String(f)));
+}
+
+function creditsFrom(score){
+  return score.creators.map(c => `${CREDIT_LABEL[c.type] || (c.type ? c.type : "")}${CREDIT_LABEL[c.type] || c.type ? "  " : ""}${c.name}`).join("\n");
+}
+
+function loadScore(text, label, isExample){
+  const score = parseScore(text);
+  state.score = score; state.partIdx = 0; state.staff = 1; state.isExample = isExample; state.fileName = label;
+  const ps = $("#partSel"); ps.innerHTML = "";
+  score.parts.forEach((p, i) => ps.append(new Option(p.name, String(i))));
+  $("#titleIn").value = score.title || "";
+  $("#subIn").value = score.parts[0].name || "";
+  $("#credIn").value = creditsFrom(score);
+  $("#fileName").textContent = isExample ? "Example loaded: 欢乐颂 (Ode to Joy)" : label;
+  $("#exampleBtn").textContent = isExample ? "Reload the example" : "Load the example instead";
+  syncStaff();
+}
+
+function syncStaff(){
+  const p = state.score.parts[state.partIdx];
+  const ss = $("#staffSel"); ss.innerHTML = "";
+  for(let i = 1; i <= p.staves; i++) ss.append(new Option(p.staves === 2 ? (i===1 ? "Staff 1 (upper)" : "Staff 2 (lower)") : `Staff ${i}`, String(i)));
+  if(state.staff > p.staves) state.staff = 1;
+  ss.value = String(state.staff);
+  $("#staffWrap").hidden = p.staves < 2;
+}
+
+function showMessages(list){
+  const box = $("#msgs"); box.innerHTML = "";
+  for(const m of list){ const d = document.createElement("div"); d.className = "msg " + m.kind; d.textContent = m.text; box.append(d); }
+}
+
+async function ensureFonts(meta, conv){
+  const words = conv.measures.flatMap(M => M.items.flatMap(it => it.tok && it.first ? it.tok.words : [])).join("");
+  try {
+    await Promise.race([
+      Promise.all([
+        document.fonts.load(`500 16px "Noto Serif SC"`, "0123456789♭♯="),
+        document.fonts.load(`700 23px "Noto Serif SC"`, meta.title || "简"),
+        document.fonts.load(`400 12px "Noto Sans SC"`, (meta.subtitle + meta.credits + words) || "简"),
+        document.fonts.load(`italic 700 11px "Noto Serif SC"`, "mpf")
+      ]),
+      new Promise(r => setTimeout(r, 4000))
+    ]);
+  } catch(e) {}
+}
+
+function currentMeta(){ return { title: $("#titleIn").value.trim(), subtitle: $("#subIn").value.trim(), credits: $("#credIn").value }; }
+
+function paint(canvas, layout, pi, S, arcState){
+  canvas.width = Math.round(PAGE.w * S); canvas.height = Math.round(PAGE.h * S);
+  const ctx = canvas.getContext("2d");
+  drawPage(ctx, layout, pi, S, arcState);
+}
+
+let renderSeq = 0;
+async function render(){
+  if(!state.score) return;
+  const seq = ++renderSeq;
+  const part = state.score.parts[state.partIdx];
+  const msgs = [];
+  let conv;
+  try { conv = convertPart(part, state.staff); }
+  catch(e){ showMessages([{kind:"err", text:"Couldn't read this part: " + e.message}]); return; }
+  applyJianpu(conv, state.key === "auto" ? "auto" : parseInt(state.key,10), state.oct);
+  const meta = currentMeta();
+  const layout = layoutScore(conv, meta);
+  state.layout = layout;
+  await ensureFonts(meta, conv);
+  if(seq !== renderSeq) return;
+  const box = $("#pages"); box.innerHTML = "";
+  const arcState = { open:{}, tup:null };
+  const S = Math.min(2.4, Math.max(1.6, (window.devicePixelRatio||1) * 1.15));
+  layout.pages.forEach((_, pi) => {
+    const c = document.createElement("canvas");
+    c.setAttribute("role","img"); c.setAttribute("aria-label", `Jianpu page ${pi+1} of ${layout.pages.length}`);
+    paint(c, layout, pi, S, arcState);
+    box.append(c);
+  });
+  // status
+  const st = $("#status"); st.innerHTML = "";
+  const chips = [];
+  if(state.isExample) chips.push(["Example score", "ex"]);
+  chips.push([`1=${KEY_NAME[String(conv.headFifths)]}${conv.keyOverridden ? " (set)" : ""}`]);
+  chips.push([conv.firstTime.join("/")]);
+  chips.push([`${conv.measures.length} bars`]);
+  chips.push([`${layout.pages.length} page${layout.pages.length>1?"s":""}`]);
+  for(const [t,cls] of chips){ const s = document.createElement("span"); s.className = "chip" + (cls ? " " + cls : ""); s.textContent = t; st.append(s); }
+  if(!conv.stats.notes) msgs.push({kind:"warn", text:"This part and staff have no notes. Try another part or staff."});
+  if(conv.stats.multiVoice) msgs.push({kind:"warn", text:"Some bars have more than one voice on this staff. Only the first voice is shown."});
+  if(conv.stats.chords) msgs.push({kind:"warn", text:"Chords and double stops are stacked, highest note on top."});
+  if(part.staves > 1 && state.staff === 1) msgs.push({kind:"warn", text:`This part has ${part.staves} staves. Switch staff to convert the other one.`});
+  showMessages(msgs);
+}
+
+/* ---------- export ---------- */
+async function exportPdf(){
+  const btn = $("#pdfBtn");
+  if(!state.layout) return;
+  if(!window.jspdf){ showMessages([{kind:"err", text:"The PDF library didn't load. Check your connection and reload the page."}]); return; }
+  btn.disabled = true; const old = btn.textContent; btn.textContent = "Building PDF…";
+  try {
+    const layout = layoutScore(state.layout.conv, currentMeta());
+    await ensureFonts(layout.meta, layout.conv);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit:"pt", format:"a4", orientation:"portrait", compress:true });
+    const arcState = { open:{}, tup:null };
+    const c = document.createElement("canvas");
+    layout.pages.forEach((_, pi) => {
+      paint(c, layout, pi, 3.2, arcState);
+      if(pi > 0) pdf.addPage("a4","portrait");
+      pdf.addImage(c.toDataURL("image/png"), "PNG", 0, 0, PAGE.w, PAGE.h, undefined, "FAST");
+    });
+    const blob = pdf.output("blob");
+    const base = (layout.meta.title || "score").replace(/[\\/:*?"<>|]+/g, " ").trim() || "score";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${base} 简谱.pdf`; a.rel = "noopener";
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    btn.textContent = "Saved";
+    setTimeout(() => { btn.textContent = old; }, 1800);
+  } catch(e){
+    btn.textContent = old;
+    showMessages([{kind:"err", text:"Couldn't build the PDF: " + (e && e.message || e)}]);
+  } finally { btn.disabled = false; }
+}
+
+/* ---------- events ---------- */
+async function readFile(file){
+  // Sniff the bytes instead of trusting the extension: phones often hide or rename .mxl files.
+  const buf = await file.arrayBuffer();
+  const head = new Uint8Array(buf.slice(0, 5));
+  const sig = String.fromCharCode(...head);
+  if(sig.startsWith("%PDF")) throw new Error("PDFs need music recognition first. Open the PDF in Audiveris or MuseScore, export it as MusicXML, then open that file here.");
+  if(sig.startsWith("PK")){
+    if(!window.JSZip) throw new Error("The unzip library didn't load, so compressed .mxl files can't be opened. Reload the page, or export uncompressed .musicxml instead.");
+    let zip;
+    try { zip = await JSZip.loadAsync(buf); } catch(e){ throw new Error("This compressed file couldn't be opened. Export it again as .mxl or .musicxml."); }
+    let path = null;
+    const cont = zip.file("META-INF/container.xml");
+    if(cont){ const x = new DOMParser().parseFromString(await cont.async("string"), "application/xml"); const rf = x.getElementsByTagName("rootfile")[0]; path = rf && rf.getAttribute("full-path"); }
+    if(!path || !zip.file(path)) path = Object.keys(zip.files).find(n => /\.(xml|musicxml)$/i.test(n) && !n.startsWith("META-INF"));
+    if(!path) throw new Error("Couldn't find the score inside this .mxl file.");
+    return zip.file(path).async("string");
+  }
+  let text = new TextDecoder("utf-8").decode(buf);
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  if(!/<score-(partwise|timewise)/.test(text.slice(0, 4000))) throw new Error("This doesn't look like a MusicXML file. Export the score as MusicXML (.mxl or .musicxml) and open that file.");
+  return text;
+}
+
+async function openFile(file){
+  try {
+    const text = await readFile(file);
+    loadScore(text, file.name, false);
+    await render();
+  } catch(e){
+    showMessages([{kind:"err", text: e.message || String(e)}]);
+  }
+}
+
+$("#fileIn").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) openFile(f); e.target.value = ""; });
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) openFile(f); });
+$("#exampleBtn").addEventListener("click", () => { loadScore(exampleXML(), "", true); render(); });
+$("#partSel").addEventListener("change", e => { state.partIdx = parseInt(e.target.value,10)||0; state.staff = 1; $("#subIn").value = state.score.parts[state.partIdx].name || ""; syncStaff(); render(); });
+$("#staffSel").addEventListener("change", e => { state.staff = parseInt(e.target.value,10)||1; render(); });
+$("#keySel").addEventListener("change", e => { state.key = e.target.value; render(); });
+$("#octSel").addEventListener("change", e => { state.oct = e.target.value; render(); });
+let tmr = null;
+["#titleIn","#subIn","#credIn"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(tmr); tmr = setTimeout(render, 250); }));
+$("#pdfBtn").addEventListener("click", exportPdf);
+
+fillKeySelect();
+loadScore(exampleXML(), "", true);
+render();
+
+})();
+</script>
+
+</body>
+</html>
